@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+scikit-image
+scikit-fuzzy
+numpy
+matplotlib
+pillow
+pydantic-settings
+python-dotenv
