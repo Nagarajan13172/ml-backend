@@ -1,43 +1,49 @@
-# Fuzzy Image Segmentation — FastAPI Backend
+# Monkeypox AI Backend
 
-A REST API that wraps a fuzzy image segmentation pipeline using **scikit-fuzzy** and **scikit-image**.
+A FastAPI backend for two image workflows:
+- Classification: upload one lesion image and receive the top predicted label
+- Segmentation: upload one lesion image and receive processed diagnostic masks
 
 ## Features
-- Upload any image (PNG, JPEG, BMP, TIFF)
-- Returns 3 base64-encoded PNG images:
-  - **Original** (grayscale)
-  - **Fuzzy-segmented** (membership function weighted)
-  - **Binary** (Otsu thresholded)
-- Swagger UI at `/docs` for instant testing
-
----
+- Upload PNG, JPEG, BMP, or TIFF images
+- Classification endpoint returns:
+  - `predicted_label`
+  - `confidence`
+- Segmentation endpoint returns:
+  - `original_image`
+  - `segmented_image`
+  - `binary_image`
+  - `masked_image`
+- Swagger UI at `/docs`
 
 ## Project Structure
-```
+```text
 backend/
 ├── app/
-│   ├── main.py                    # FastAPI app + CORS
-│   ├── config.py                  # Settings (pydantic-settings)
+│   ├── main.py
+│   ├── config.py
 │   ├── routers/
-│   │   └── segmentation.py        # POST /api/segment
-│   ├── services/
-│   │   └── segmentation_service.py # ML pipeline
-│   └── schemas/
-│       └── segmentation.py        # Pydantic response model
-├── requirements.txt
+│   │   ├── classification.py
+│   │   └── segmentation.py
+│   ├── schemas/
+│   │   ├── classification.py
+│   │   └── segmentation.py
+│   └── services/
+│       ├── classification_service.py
+│       └── segmentation_service.py
+├── tests/
 ├── .env.example
+├── requirements.txt
 └── README.md
 ```
 
----
-
 ## Quick Start
 
-### 1. Create & activate a virtual environment
+### 1. Create and activate a virtual environment
 ```bash
 cd ML_DEMO/backend
 python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate
 ```
 
 ### 2. Install dependencies
@@ -45,56 +51,58 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment (optional)
+### 3. Configure environment
 ```bash
 cp .env.example .env
-# Edit .env to add your frontend origin to ALLOWED_ORIGINS
 ```
+
+Important settings:
+- `CLASSIFICATION_MODEL_PATH`: path to your saved `.keras` or `.h5` classifier model
+- `CLASSIFICATION_CLASS_NAMES`: comma-separated labels in the same order as model outputs
+- `ALLOWED_ORIGINS`: frontend origins allowed by CORS
 
 ### 4. Run the server
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
----
-
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | API info & links |
-| `POST` | `/api/segment` | Upload image → get 3 segmented images |
-| `GET` | `/api/segment/health` | Health check |
+| `GET` | `/` | API info and links |
+| `POST` | `/api/classify` | Upload image and get top predicted label |
+| `GET` | `/api/classify/health` | Classifier readiness |
+| `POST` | `/api/segment` | Upload image and get segmentation outputs |
+| `GET` | `/api/segment/health` | Segmentation health |
 | `GET` | `/docs` | Swagger UI |
-| `GET` | `/redoc` | ReDoc UI |
 
-### Example Request (curl)
+## Example Classification Request
+```bash
+curl -X POST "http://localhost:8000/api/classify" \
+  -F "file=@/path/to/your/image.png"
+```
+
+## Example Classification Response
+```json
+{
+  "predicted_label": "Monkeypox",
+  "confidence": 0.91,
+  "class_index": 0,
+  "message": "Classification completed successfully"
+}
+```
+
+## Example Segmentation Request
 ```bash
 curl -X POST "http://localhost:8000/api/segment" \
   -F "file=@/path/to/your/image.png"
 ```
 
-### Example Response
-```json
-{
-  "original_image": "<base64 PNG string>",
-  "segmented_image": "<base64 PNG string>",
-  "binary_image": "<base64 PNG string>",
-  "message": "Segmentation completed successfully"
-}
-```
-
-### Display in Frontend (HTML)
-```html
-<img src="data:image/png;base64,{{ original_image }}" />
-```
-
----
-
-## CORS Configuration
-By default the API allows requests from:
-- `http://localhost:3000` (React)
-- `http://localhost:5173` (Vite)
+## CORS
+By default the API allows:
+- `http://localhost:3000`
+- `http://localhost:5173`
 - `http://localhost:8080`
 
-Add your frontend URL to `ALLOWED_ORIGINS` in `.env`.
+Update `.env` if your frontend runs elsewhere.

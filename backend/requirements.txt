@@ -8,3 +8,5 @@ matplotlib
 pillow
 pydantic-settings
 python-dotenv
+tensorflow-macos; platform_system == "Darwin" and platform_machine == "arm64"
+tensorflow; platform_system != "Darwin" or platform_machine != "arm64"

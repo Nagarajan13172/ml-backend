@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import segmentation
+from app.routers import classification, segmentation
 
 # ---------------------------------------------------------------------------
 # App Initialization
@@ -11,10 +11,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(
-        "A FastAPI service that performs **fuzzy image segmentation** using "
-        "scikit-fuzzy membership functions and Otsu thresholding. "
-        "Upload any image and receive three processed outputs: "
-        "original (grayscale), fuzzy-segmented, and binary."
+        "A FastAPI service for monkeypox-related image workflows. "
+        "It supports lightweight lesion **classification** for top-label prediction "
+        "and image **segmentation** for diagnostic visual outputs."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
@@ -36,6 +35,7 @@ app.add_middleware(
 # Routers
 # ---------------------------------------------------------------------------
 app.include_router(segmentation.router, prefix="/api")
+app.include_router(classification.router, prefix="/api")
 
 
 # ---------------------------------------------------------------------------
@@ -46,5 +46,6 @@ async def root():
     return {
         "message": f"Welcome to {settings.APP_NAME} v{settings.APP_VERSION}",
         "docs": "/docs",
+        "classification_health": "/api/classify/health",
         "health": "/api/segment/health",
     }

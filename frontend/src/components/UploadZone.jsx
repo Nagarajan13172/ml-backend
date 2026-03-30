@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { formatBytes } from '../api/segmentationApi';
+import { formatBytes } from '../api/classificationApi';
 
 /**
  * Drag-and-drop image upload zone.
@@ -75,8 +75,8 @@ export default function UploadZone({ onFileSelect, file, onClear }) {
           {dragOver ? '📂' : '🖼️'}
         </div>
         <div className="upload-text" style={{ textAlign: 'center' }}>
-          <h3>{dragOver ? 'Drop your image here' : 'Upload Disease Image'}</h3>
-          <p>Drag & drop or click to browse</p>
+          <h3>{dragOver ? 'Drop your image here' : 'Upload Lesion Image'}</h3>
+          <p>Drag, drop, or click to run a single-label disease classification</p>
         </div>
         <div className="upload-badge">
           {['PNG', 'JPEG', 'BMP', 'TIFF'].map(fmt => (
