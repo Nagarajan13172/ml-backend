@@ -538,6 +538,13 @@ body {
   border-color: rgba(139, 92, 246, 0.6);
   box-shadow: 0 8px 32px rgba(139, 92, 246, 0.2);
 }
+.image-card.gradcam-card {
+  border-color: rgba(239, 68, 68, 0.24);
+}
+.image-card.gradcam-card:hover {
+  border-color: rgba(239, 68, 68, 0.46);
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.16);
+}
 
 .card-header {
   padding: 0.85rem 1.1rem;
@@ -555,6 +562,8 @@ body {
 .card-icon.original { background: rgba(59, 130, 246, 0.15); }
 .card-icon.segmented { background: rgba(16, 185, 129, 0.15); }
 .card-icon.binary { background: rgba(139, 92, 246, 0.15); }
+.card-icon.gradcam { background: rgba(239, 68, 68, 0.16); }
+.card-icon.gradcam-bands { background: rgba(250, 204, 21, 0.18); }
 
 .card-copy {
   min-width: 0;
@@ -693,6 +702,15 @@ body {
 .download-btn.masked:hover {
   background: rgba(16, 185, 129, 0.2);
   color: #6ee7b7;
+}
+.download-btn.gradcam {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.10);
+  border-color: rgba(249, 115, 22, 0.22);
+}
+.download-btn.gradcam:hover {
+  background: rgba(249, 115, 22, 0.18);
+  color: #fdba74;
 }
 
 /* ─── Binary Details Modal ─── */

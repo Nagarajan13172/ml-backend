@@ -20,8 +20,11 @@ ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/bmp", "i
         "- **original_image**: grayscale version of your input\n"
         "- **segmented_image**: fuzzy-membership-segmented image\n"
         "- **binary_image**: hybrid adaptive/Otsu binary image\n"
+        "- **gradcam_overlay_image**: three-band segmentation attention overlay\n"
+        "- **gradcam_banded_image**: discrete green/yellow/red affected-area map\n"
         "- **masked_image**: transparent lesion cutout based on the binary mask\n"
         "- **binary_details**: description and timing metadata for the binary mask\n\n"
+        "- **gradcam_details**: description and timing metadata for the segmentation attention map\n\n"
         "All images are returned as **base64-encoded PNG** strings."
     ),
 )
@@ -50,8 +53,11 @@ async def segment_image(file: UploadFile = File(..., description="Image file to 
             original_image=result["original_image"],
             segmented_image=result["segmented_image"],
             binary_image=result["binary_image"],
+            gradcam_overlay_image=result["gradcam_overlay_image"],
+            gradcam_banded_image=result["gradcam_banded_image"],
             masked_image=result["masked_image"],
             binary_details=result["binary_details"],
+            gradcam_details=result["gradcam_details"],
         )
 
     except HTTPException:

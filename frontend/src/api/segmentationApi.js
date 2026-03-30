@@ -3,7 +3,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 /**
  * Upload an image file to the segmentation API.
  * @param {File} file - The image file to upload.
- * @returns {Promise<{original_image, segmented_image, binary_image, masked_image, binary_details, message}>}
+ * @returns {Promise<{original_image, segmented_image, binary_image, gradcam_overlay_image, gradcam_banded_image, masked_image, binary_details, gradcam_details, message}>}
  */
 export async function segmentImage(file) {
   const formData = new FormData();

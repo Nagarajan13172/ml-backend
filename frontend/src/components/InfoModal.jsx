@@ -55,19 +55,19 @@ export default function InfoModal({ details, onClose }) {
         className="modal-panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="binary-details-title"
+        aria-labelledby="segmentation-details-title"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
           <div>
             <div className="modal-kicker">Segmentation Insight</div>
-            <h3 id="binary-details-title">{details.title}</h3>
+            <h3 id="segmentation-details-title">{details.title}</h3>
           </div>
           <button
             type="button"
             className="modal-close"
             onClick={onClose}
-            aria-label="Close binary mask details"
+            aria-label="Close details"
             title="Close"
           >
             <CloseIcon />
@@ -78,7 +78,7 @@ export default function InfoModal({ details, onClose }) {
 
         <div className="modal-grid">
           <div className="modal-stat">
-            <span className="modal-stat-label">Average Filtering Time</span>
+            <span className="modal-stat-label">Processing Time</span>
             <strong>{formatMilliseconds(details.average_filtering_time_ms)}</strong>
           </div>
           <div className="modal-stat">

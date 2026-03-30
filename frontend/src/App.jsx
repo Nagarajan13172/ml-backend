@@ -66,7 +66,7 @@ export default function App() {
   const [segStatus, setSegStatus]   = useState('idle'); // idle|loading|success|error
   const [segResult, setSegResult]   = useState(null);
   const [segError, setSegError]     = useState('');
-  const [binaryInfo, setBinaryInfo] = useState(null);
+  const [infoDetails, setInfoDetails] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -78,7 +78,7 @@ export default function App() {
     setClassStatus('idle'); setEpoch(0); setLiveLabel('');
     setClassResult(null);   setClassError('');
     setSegStatus('idle');   setSegResult(null); setSegError('');
-    setBinaryInfo(null);
+    setInfoDetails(null);
   }, []);
 
   const handleClear = useCallback(() => {
@@ -86,7 +86,7 @@ export default function App() {
     setClassStatus('idle'); setEpoch(0); setLiveLabel('');
     setClassResult(null);   setClassError('');
     setSegStatus('idle');   setSegResult(null); setSegError('');
-    setBinaryInfo(null);
+    setInfoDetails(null);
   }, []);
 
   // ── Classify: stream 100 TTA epochs ──────────────────────────────────
@@ -124,7 +124,7 @@ export default function App() {
     setSegStatus('loading');
     setSegResult(null);
     setSegError('');
-    setBinaryInfo(null);
+    setInfoDetails(null);
 
     try {
       const data = await segmentImage(file);
@@ -275,7 +275,21 @@ export default function App() {
                 description="Adaptive / Otsu threshold"
                 b64={segResult.binary_image}
                 info={segResult.binary_details}
-                onInfoClick={() => setBinaryInfo(segResult.binary_details)}
+                onInfoClick={() => setInfoDetails(segResult.binary_details)}
+              />
+              <ImageCard
+                type="gradcam"
+                title="Segmentation Grad-CAM"
+                description="Three-band overlay derived from the lesion score map"
+                b64={segResult.gradcam_overlay_image}
+                info={segResult.gradcam_details}
+                onInfoClick={() => setInfoDetails(segResult.gradcam_details)}
+              />
+              <ImageCard
+                type="gradcamBands"
+                title="Affected Area Bands"
+                description="Green low · yellow medium · red high"
+                b64={segResult.gradcam_banded_image}
               />
             </div>
           </div>
@@ -294,7 +308,7 @@ export default function App() {
         Classification + Segmentation
       </footer>
 
-      <InfoModal details={binaryInfo} onClose={() => setBinaryInfo(null)} />
+      <InfoModal details={infoDetails} onClose={() => setInfoDetails(null)} />
     </div>
   );
 }
