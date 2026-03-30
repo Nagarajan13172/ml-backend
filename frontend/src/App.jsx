@@ -17,8 +17,14 @@ const CARDS = [
   },
   {
     type: 'binary',
-    title: 'Binary Image',
-    description: 'Otsu thresholded · Key Diagnostic Output',
+    title: 'Binary Mask',
+    description: 'Adaptive + Otsu cleaned',
+    highlight: true,
+  },
+  {
+    type: 'masked',
+    title: 'Lesion Extracted',
+    description: 'Background removed · Transparent',
     highlight: true,
   },
 ];

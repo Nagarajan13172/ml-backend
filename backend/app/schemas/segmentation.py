@@ -6,6 +6,7 @@ class SegmentationResponse(BaseModel):
     original_image: str      # base64-encoded PNG of the original (grayscale) image
     segmented_image: str     # base64-encoded PNG of the fuzzy-segmented image
     binary_image: str        # base64-encoded PNG of the Otsu-thresholded binary image
+    masked_image: str        # base64-encoded PNG of the lesion extracted (bg removed)
     message: str = "Segmentation completed successfully"
 
 

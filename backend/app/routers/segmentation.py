@@ -20,13 +20,13 @@ ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/bmp", "i
         "Upload an image file (PNG, JPEG, BMP, TIFF) and receive three processed images:\n"
         "- **original_image**: grayscale version of your input\n"
         "- **segmented_image**: fuzzy-membership-segmented image\n"
-        "- **binary_image**: Otsu-thresholded binary image\n\n"
+        "- **binary_image**: hybrid adaptive/Otsu binary image\n\n"
         "All images are returned as **base64-encoded PNG** strings."
     ),
 )
 async def segment_image(file: UploadFile = File(..., description="Image file to segment")):
     """
-    Run fuzzy segmentation + Otsu thresholding on the uploaded image.
+    Run fuzzy segmentation + hybrid adaptive/Otsu masking on the uploaded image.
     """
     # Validate content type
     if file.content_type not in ALLOWED_CONTENT_TYPES:
@@ -49,6 +49,7 @@ async def segment_image(file: UploadFile = File(..., description="Image file to 
             original_image=result["original_image"],
             segmented_image=result["segmented_image"],
             binary_image=result["binary_image"],
+            masked_image=result["masked_image"],
         )
 
     except HTTPException:
