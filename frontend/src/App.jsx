@@ -143,9 +143,9 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <div className="header-logo">AI</div>
-          <span className="header-title">MonkeyPox AI Analyzer</span>
+          <span className="header-title">POXAI</span>
           <div className="header-actions">
-            <span className="header-subtitle">Classification · Segmentation · FastAPI</span>
+            <span className="header-subtitle">Classification · Segmentation</span>
             <button
               type="button"
               className="theme-toggle"
@@ -163,12 +163,12 @@ export default function App() {
         <div className="hero">
           <h1>Disease Detection &amp; Lesion Segmentation</h1>
           <p>Upload a lesion image, then run classification or segmentation independently.</p>
-          <div className="hero-badges">
+          {/* <div className="hero-badges">
             <span className="hero-badge">100-Epoch TTA</span>
             <span className="hero-badge">Fuzzy Logic</span>
             <span className="hero-badge">Background Removal</span>
             <span className="hero-badge">TensorFlow</span>
-          </div>
+          </div> */}
         </div>
 
         <UploadZone file={file} onFileSelect={handleFileSelect} onClear={handleClear} />
@@ -291,7 +291,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        ML_DEMO · 100-Epoch TTA Classification + Fuzzy Segmentation · FastAPI + React
+        Classification + Segmentation
       </footer>
 
       <InfoModal details={binaryInfo} onClose={() => setBinaryInfo(null)} />

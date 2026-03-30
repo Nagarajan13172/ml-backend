@@ -1,46 +1,28 @@
 #!/usr/bin/env python3
 """
-Train the monkeypox classifier using EfficientNetB0 + FuzzyTriangularMembership.
+Train the skin lesion classifier using EfficientNetB0 + FuzzyTriangularMembership.
+Classes are auto-detected from backend/data/train/ subdirectories.
 
-── Dataset layout expected ──────────────────────────────────────────────────
-backend/
-└── data/
-    ├── train/
-    │   ├── Monkeypox/      ← lesion images
-    │   ├── Chickenpox/
-    │   ├── Measles/
-    │   └── Normal/
-    └── val/                ← optional; auto-split from train if absent
-        ├── Monkeypox/
-        ├── Chickenpox/
-        ├── Measles/
-        └── Normal/
-
-── Usage ─────────────────────────────────────────────────────────────────────
+Usage:
     cd backend
     python scripts/train_model.py
-
-    # Override defaults:
-    python scripts/train_model.py --epochs 30 --batch 16 --lr 1e-4
-──────────────────────────────────────────────────────────────────────────────
+    python scripts/train_model.py --epochs 20 --batch 16
 """
 import argparse
 import sys
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR    = BACKEND_DIR / "data" / "train"
+TRAIN_DIR   = BACKEND_DIR / "data" / "train"
 VAL_DIR     = BACKEND_DIR / "data" / "val"
 MODEL_PATH  = BACKEND_DIR / "models" / "monkeypox_classifier.keras"
-
-CLASS_NAMES = ["Monkeypox", "Chickenpox", "Measles", "Normal"]
+ENV_PATH    = BACKEND_DIR / ".env"
 IMG_SIZE    = 224
 
 
-# ── Custom fuzzy layer (must match classification_service.py exactly) ─────────
 def build_fuzzy_layer(tf):
     class FuzzyTriangularMembership(tf.keras.layers.Layer):
-        def __init__(self, a: float = 0.2, b: float = 0.6, c: float = 1.0, **kwargs):
+        def __init__(self, a=0.2, b=0.6, c=1.0, **kwargs):
             super().__init__(**kwargs)
             self.a, self.b, self.c = float(a), float(b), float(c)
 
@@ -53,95 +35,107 @@ def build_fuzzy_layer(tf):
             cfg = super().get_config()
             cfg.update({"a": self.a, "b": self.b, "c": self.c})
             return cfg
-
     return FuzzyTriangularMembership
 
 
-# ── Build model ───────────────────────────────────────────────────────────────
-def build_model(tf, num_classes: int):
+def get_class_names():
+    if not TRAIN_DIR.exists():
+        print(f"ERROR: {TRAIN_DIR} not found.")
+        sys.exit(1)
+    names = sorted(p.name for p in TRAIN_DIR.iterdir() if p.is_dir())
+    if not names:
+        print(f"ERROR: No class subdirectories in {TRAIN_DIR}")
+        sys.exit(1)
+    return names
+
+
+def build_model(tf, num_classes):
     FuzzyLayer = build_fuzzy_layer(tf)
 
-    # Base: EfficientNetB0 pre-trained on ImageNet, no top
     base = tf.keras.applications.EfficientNetB0(
-        include_top=False,
-        weights="imagenet",
+        include_top=False, weights="imagenet",
         input_shape=(IMG_SIZE, IMG_SIZE, 3),
     )
-    base.trainable = False  # freeze base initially
+    base.trainable = False
 
     inputs = tf.keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3), name="input_image")
-
-    # Preprocessing (EfficientNet expects [0,255] but we normalise first)
     x = tf.keras.layers.Rescaling(1.0 / 255.0)(inputs)
-    x = FuzzyTriangularMembership(a=0.0, b=0.5, c=1.0, name="fuzzy_membership")(x)
-
-    # Rescale back to [0,255] for EfficientNet preprocessing
+    x = FuzzyLayer(a=0.0, b=0.5, c=1.0, name="fuzzy_membership")(x)
     x = tf.keras.layers.Rescaling(255.0)(x)
     x = tf.keras.applications.efficientnet.preprocess_input(x)
-
     x = base(x, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Dense(256, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.4)(x)
+    x = tf.keras.layers.Dropout(0.5)(x)
     outputs = tf.keras.layers.Dense(num_classes, activation="softmax", name="predictions")(x)
 
-    return tf.keras.Model(inputs, outputs, name="monkeypox_classifier"), base
+    return tf.keras.Model(inputs, outputs, name="skin_lesion_classifier"), base
 
 
-# ── Data pipeline ─────────────────────────────────────────────────────────────
-def build_datasets(tf, batch_size: int):
-    if not DATA_DIR.exists():
-        print(f"\nERROR: Training data not found at: {DATA_DIR}")
-        print("Create the directory structure:")
-        print("  backend/data/train/Monkeypox/")
-        print("  backend/data/train/Chickenpox/")
-        print("  backend/data/train/Measles/")
-        print("  backend/data/train/Normal/")
-        print("Then add images to each class folder and re-run.\n")
-        sys.exit(1)
+def build_datasets(tf, class_names, batch_size):
+    AUTOTUNE = tf.data.AUTOTUNE
 
     augment = tf.keras.Sequential([
         tf.keras.layers.RandomFlip("horizontal_and_vertical"),
-        tf.keras.layers.RandomRotation(0.2),
-        tf.keras.layers.RandomZoom(0.15),
-        tf.keras.layers.RandomBrightness(0.15),
-        tf.keras.layers.RandomContrast(0.15),
-    ], name="augmentation")
+        tf.keras.layers.RandomRotation(0.3),
+        tf.keras.layers.RandomZoom(0.2),
+        tf.keras.layers.RandomBrightness(0.2),
+        tf.keras.layers.RandomContrast(0.2),
+    ])
 
-    common_kwargs = dict(
+    common = dict(
         image_size=(IMG_SIZE, IMG_SIZE),
         batch_size=batch_size,
-        class_names=CLASS_NAMES,
+        class_names=class_names,
         label_mode="categorical",
         interpolation="bilinear",
-        shuffle=True,
         seed=42,
     )
 
     if VAL_DIR.exists():
-        train_ds = tf.keras.utils.image_dataset_from_directory(str(DATA_DIR), **common_kwargs)
-        val_ds   = tf.keras.utils.image_dataset_from_directory(str(VAL_DIR),  **{**common_kwargs, "shuffle": False})
-    else:
-        print("No val/ directory found — using 80/20 train/val split from train/")
         train_ds = tf.keras.utils.image_dataset_from_directory(
-            str(DATA_DIR), validation_split=0.2, subset="training",  **common_kwargs
+            str(TRAIN_DIR), shuffle=True, **common
         )
-        val_ds   = tf.keras.utils.image_dataset_from_directory(
-            str(DATA_DIR), validation_split=0.2, subset="validation", **{**common_kwargs, "shuffle": False}
+        val_ds = tf.keras.utils.image_dataset_from_directory(
+            str(VAL_DIR), shuffle=False, **common
+        )
+    else:
+        train_ds = tf.keras.utils.image_dataset_from_directory(
+            str(TRAIN_DIR), validation_split=0.2, subset="training", shuffle=True, **common
+        )
+        val_ds = tf.keras.utils.image_dataset_from_directory(
+            str(TRAIN_DIR), validation_split=0.2, subset="validation", shuffle=False, **common
         )
 
-    AUTOTUNE = tf.data.AUTOTUNE
-    train_ds = train_ds.map(
-        lambda x, y: (augment(x, training=True), y), num_parallel_calls=AUTOTUNE
-    ).prefetch(AUTOTUNE)
+    train_ds = (
+        train_ds
+        .map(lambda x, y: (augment(x, training=True), y), num_parallel_calls=AUTOTUNE)
+        .prefetch(AUTOTUNE)
+    )
     val_ds = val_ds.prefetch(AUTOTUNE)
-
     return train_ds, val_ds
 
 
-# ── Training ──────────────────────────────────────────────────────────────────
-def train(epochs: int = 20, batch_size: int = 32, lr: float = 1e-3, fine_tune_lr: float = 1e-5):
+def update_env(class_names):
+    """Write the learned class names back into .env so the API uses them."""
+    text = ENV_PATH.read_text()
+    new_val = ",".join(class_names)
+    lines = []
+    found = False
+    for line in text.splitlines():
+        if line.startswith("CLASSIFICATION_CLASS_NAMES="):
+            lines.append(f"CLASSIFICATION_CLASS_NAMES={new_val}")
+            found = True
+        else:
+            lines.append(line)
+    if not found:
+        lines.append(f"CLASSIFICATION_CLASS_NAMES={new_val}")
+    ENV_PATH.write_text("\n".join(lines) + "\n")
+    print(f"Updated .env → CLASSIFICATION_CLASS_NAMES={new_val}")
+
+
+def train(epochs=20, batch_size=16, head_lr=1e-3, fine_lr=1e-5):
     try:
         import tensorflow as tf
     except ImportError:
@@ -149,64 +143,92 @@ def train(epochs: int = 20, batch_size: int = 32, lr: float = 1e-3, fine_tune_lr
         sys.exit(1)
 
     print(f"TensorFlow {tf.__version__}")
+    class_names = get_class_names()
+    num_classes = len(class_names)
+    print(f"Classes ({num_classes}): {class_names}")
 
-    train_ds, val_ds = build_datasets(tf, batch_size)
-    num_classes = len(CLASS_NAMES)
-
-    model, base = build_model(tf, num_classes)
+    train_ds, val_ds = build_datasets(tf, class_names, batch_size)
+    model, base      = build_model(tf, num_classes)
     model.summary(show_trainable=True)
+
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(
-            str(MODEL_PATH), monitor="val_accuracy", save_best_only=True, verbose=1,
+            str(MODEL_PATH), monitor="val_accuracy",
+            save_best_only=True, verbose=1,
         ),
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_accuracy", patience=5, restore_best_weights=True, verbose=1,
+            monitor="val_accuracy", patience=6,
+            restore_best_weights=True, verbose=1,
         ),
         tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss", factor=0.5, patience=3, verbose=1,
         ),
     ]
 
-    # ── Phase 1: train head only (frozen base) ──
-    print(f"\n{'='*60}")
-    print("Phase 1 — training classifier head (base frozen)")
-    print(f"{'='*60}\n")
+    # ── Phase 1: head only ───────────────────────────────────────────────
+    print(f"\n{'='*55}\nPhase 1 — head training ({epochs} epochs)\n{'='*55}")
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(lr),
+        optimizer=tf.keras.optimizers.Adam(head_lr),
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
-    model.fit(train_ds, validation_data=val_ds, epochs=epochs, callbacks=callbacks)
+    history = model.fit(train_ds, validation_data=val_ds, epochs=epochs, callbacks=callbacks)
+    best_acc = max(history.history.get("val_accuracy", [0]))
+    print(f"\nBest Phase-1 val_accuracy: {best_acc:.4f}")
 
-    # ── Phase 2: fine-tune top layers of EfficientNet ──
-    print(f"\n{'='*60}")
-    print("Phase 2 — fine-tuning top 30 layers of EfficientNetB0")
-    print(f"{'='*60}\n")
-    base.trainable = True
-    # Freeze all but the last 30 layers
-    for layer in base.layers[:-30]:
-        layer.trainable = False
+    # ── Phase 2: gentle fine-tune top 20 layers (only if Phase 1 converged) ──
+    if best_acc >= 0.70:
+        print(f"\n{'='*55}\nPhase 2 — fine-tuning top 20 layers\n{'='*55}")
+        base.trainable = True
+        for layer in base.layers[:-20]:
+            layer.trainable = False
 
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(fine_tune_lr),
-        loss="categorical_crossentropy",
-        metrics=["accuracy"],
-    )
-    model.fit(train_ds, validation_data=val_ds, epochs=epochs // 2, callbacks=callbacks)
+        # Use separate checkpoint path so Phase 1 best model is never overwritten
+        ft_checkpoint = str(MODEL_PATH).replace(".keras", "_ft.keras")
+        ft_callbacks = [
+            tf.keras.callbacks.ModelCheckpoint(
+                ft_checkpoint, monitor="val_accuracy",
+                save_best_only=True, verbose=1,
+            ),
+            tf.keras.callbacks.EarlyStopping(
+                monitor="val_accuracy", patience=5,
+                restore_best_weights=True, verbose=1,
+            ),
+        ]
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(fine_lr),
+            loss="categorical_crossentropy",
+            metrics=["accuracy"],
+        )
+        ft_history = model.fit(
+            train_ds, validation_data=val_ds,
+            epochs=max(epochs // 2, 5), callbacks=ft_callbacks,
+        )
+        ft_best = max(ft_history.history.get("val_accuracy", [0]))
+        # Only adopt fine-tuned model if it's strictly better
+        if ft_best > best_acc:
+            import shutil
+            shutil.copy2(ft_checkpoint, str(MODEL_PATH))
+            print(f"Fine-tuned model adopted ({ft_best:.4f} > {best_acc:.4f})")
+        else:
+            print(f"Keeping Phase-1 model ({best_acc:.4f} >= fine-tuned {ft_best:.4f})")
+    else:
+        print("Phase-1 accuracy < 70% — skipping fine-tune. Add more data or epochs.")
 
-    print(f"\nBest model saved → {MODEL_PATH}")
-    print("Restart the backend server to load the new model.")
+    # Save class names to .env so the API picks them up
+    update_env(class_names)
+
+    print(f"\nModel saved → {MODEL_PATH}")
+    print("Restart the backend server to load the trained model.")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train monkeypox classifier")
-    parser.add_argument("--epochs",   type=int,   default=20,   help="Phase-1 epochs (default 20)")
-    parser.add_argument("--batch",    type=int,   default=32,   help="Batch size (default 32)")
-    parser.add_argument("--lr",       type=float, default=1e-3, help="Head learning rate (default 1e-3)")
-    parser.add_argument("--fine-lr",  type=float, default=1e-5, help="Fine-tune LR (default 1e-5)")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs",   type=int,   default=20)
+    parser.add_argument("--batch",    type=int,   default=16)
+    parser.add_argument("--lr",       type=float, default=1e-3)
+    parser.add_argument("--fine-lr",  type=float, default=1e-5)
     args = parser.parse_args()
-
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    train(epochs=args.epochs, batch_size=args.batch, lr=args.lr, fine_tune_lr=args.fine_lr)
+    train(args.epochs, args.batch, args.lr, args.fine_lr)
