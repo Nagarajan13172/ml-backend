@@ -61,7 +61,6 @@ export default function UploadZone({ onFileSelect, file, onClear }) {
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
-      onClick={() => inputRef.current?.click()}
     >
       <input
         ref={inputRef}
