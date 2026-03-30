@@ -1,12 +1,58 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import './index.css';
 import UploadZone from './components/UploadZone';
 import ImageCard from './components/ImageCard';
 import { classifyImageStream } from './api/classificationApi';
 import { segmentImage } from './api/segmentationApi';
 
+const THEME_STORAGE_KEY = 'ml-demo-theme';
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') {
+    return 'dark';
+  }
+
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    return storedTheme;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function ThemeToggleIcon({ theme }) {
+  if (theme === 'dark') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M12 4.5V2m0 20v-2.5m7.5-7.5H22m-20 0h2.5m12.803-5.303 1.768-1.768M4.929 19.071l1.768-1.768m0-10.606L4.93 4.929m14.142 14.142-1.768-1.768M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M20.354 15.354A9 9 0 0 1 8.646 3.646a9 9 0 1 0 11.708 11.708Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
   const [file, setFile] = useState(null);
+  const [theme, setTheme] = useState(getInitialTheme);
 
   // Classification state
   const [classStatus, setClassStatus] = useState('idle'); // idle|loading|success|error
@@ -19,6 +65,11 @@ export default function App() {
   const [segStatus, setSegStatus]   = useState('idle'); // idle|loading|success|error
   const [segResult, setSegResult]   = useState(null);
   const [segError, setSegError]     = useState('');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   const handleFileSelect = useCallback((selectedFile) => {
     setFile(selectedFile);
@@ -80,13 +131,26 @@ export default function App() {
     }
   };
 
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+
   return (
     <div className="app">
       <header className="header">
         <div className="header-inner">
           <div className="header-logo">AI</div>
           <span className="header-title">MonkeyPox AI Analyzer</span>
-          <span className="header-subtitle">Classification · Segmentation · FastAPI</span>
+          <div className="header-actions">
+            <span className="header-subtitle">Classification · Segmentation · FastAPI</span>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setTheme(nextTheme)}
+              aria-label={`Switch to ${nextTheme} mode`}
+              title={`Switch to ${nextTheme} mode`}
+            >
+              <ThemeToggleIcon theme={theme} />
+            </button>
+          </div>
         </div>
       </header>
 
