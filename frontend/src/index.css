@@ -556,11 +556,46 @@ body {
 .card-icon.segmented { background: rgba(16, 185, 129, 0.15); }
 .card-icon.binary { background: rgba(139, 92, 246, 0.15); }
 
+.card-copy {
+  min-width: 0;
+}
 .card-title { font-weight: 700; font-size: 0.9rem; }
 .card-meta { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+.card-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.card-info-button {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: rgba(139, 92, 246, 0.1);
+  color: #d8b4fe;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.card-info-button:hover {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.16);
+  transform: translateY(-1px);
+}
+.card-info-button:focus-visible {
+  outline: 2px solid rgba(196, 181, 253, 0.7);
+  outline-offset: 2px;
+}
+.card-info-button svg {
+  width: 16px;
+  height: 16px;
+}
 
 .binary-tag {
-  margin-left: auto;
   font-size: 0.68rem;
   font-weight: 700;
   padding: 3px 8px;
@@ -658,6 +693,128 @@ body {
 .download-btn.masked:hover {
   background: rgba(16, 185, 129, 0.2);
   color: #6ee7b7;
+}
+
+/* ─── Binary Details Modal ─── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.modal-panel {
+  width: min(100%, 560px);
+  background:
+    radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 42%),
+    var(--bg-card);
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  border-radius: 22px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.35);
+  padding: 1.4rem;
+  animation: fadeIn 0.22s ease;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.modal-header h3 {
+  margin-top: 0.35rem;
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+.modal-close {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--ghost-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.modal-close:hover {
+  background: var(--ghost-bg-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.modal-close:focus-visible {
+  outline: 2px solid rgba(196, 181, 253, 0.7);
+  outline-offset: 2px;
+}
+
+.modal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.modal-description {
+  margin-top: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.96rem;
+}
+
+.modal-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.modal-stat {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+}
+
+.modal-stat-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modal-stat strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.modal-note {
+  margin-top: 1.05rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: var(--stage-bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.92rem;
 }
 
 /* ─── Section Divider ─── */
@@ -1016,5 +1173,20 @@ body {
   .preview-panel-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .card-header {
+    align-items: flex-start;
+  }
+  .card-actions {
+    gap: 0.4rem;
+  }
+  .modal-backdrop {
+    padding: 1rem;
+  }
+  .modal-panel {
+    padding: 1.15rem;
+  }
+  .modal-grid {
+    grid-template-columns: 1fr;
   }
 }

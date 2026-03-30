@@ -9,7 +9,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.segmentation_service import _build_binary_mask
+from app.services.segmentation_service import _build_binary_details, _build_binary_mask
 
 
 def _make_synthetic_lesion_image(seed: int = 11) -> tuple[np.ndarray, np.ndarray]:
@@ -56,6 +56,18 @@ class SegmentationMaskTests(unittest.TestCase):
 
         self.assertGreater(recall, 0.85)
         self.assertGreater(precision, 0.80)
+
+    def test_binary_details_include_timing_and_resolution(self) -> None:
+        image = np.zeros((120, 80), dtype=np.float64)
+
+        details = _build_binary_details(image, 45.0394)
+
+        self.assertEqual(details["title"], "Binary Mask Details")
+        self.assertEqual(details["average_filtering_time_ms"], 45.0394)
+        self.assertEqual(details["width"], 80)
+        self.assertEqual(details["height"], 120)
+        self.assertEqual(details["pixel_count"], 9600)
+        self.assertIn("80 x 120", details["timing_note"])
 
 
 if __name__ == "__main__":

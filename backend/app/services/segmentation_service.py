@@ -1,5 +1,6 @@
 import io
 import base64
+from time import perf_counter
 import numpy as np
 import skfuzzy as fuzz
 from skimage import io as skio, color
@@ -134,6 +135,29 @@ def _build_binary_mask(gray_image: np.ndarray) -> np.ndarray:
     return binary_mask.astype(bool)
 
 
+def _build_binary_details(gray_image: np.ndarray, average_filtering_time_ms: float) -> dict:
+    """Build explanatory metadata for the binary mask result."""
+    height, width = gray_image.shape
+    pixel_count = int(height * width)
+
+    return {
+        "title": "Binary Mask Details",
+        "description": (
+            "The binary mask is created by smoothing the grayscale lesion image, "
+            "measuring darker-than-background regions, combining adaptive and Otsu "
+            "thresholding, and then cleaning the mask with light morphology."
+        ),
+        "average_filtering_time_ms": round(float(average_filtering_time_ms), 4),
+        "timing_note": (
+            "Measured on this upload for the binary-mask filtering stage. "
+            f"This sample is {width} x {height}, for a total of {pixel_count:,} pixels."
+        ),
+        "width": int(width),
+        "height": int(height),
+        "pixel_count": pixel_count,
+    }
+
+
 def process_image(file_bytes: bytes) -> dict:
     """
     Run fuzzy image segmentation + hybrid local/Otsu lesion masking on raw image bytes.
@@ -148,7 +172,8 @@ def process_image(file_bytes: bytes) -> dict:
         7. Encode all outputs as base64 PNG strings
 
     Returns:
-        dict with keys: original_image, segmented_image, binary_image, masked_image
+        dict with keys: original_image, segmented_image, binary_image,
+        masked_image, binary_details
     """
     # -----------------------------------------------------------------
     # Step 1: Decode image → grayscale float [0, 1]
@@ -196,7 +221,9 @@ def process_image(file_bytes: bytes) -> dict:
     # -----------------------------------------------------------------
     # Step 5: Build robust binary mask directly from grayscale image
     # -----------------------------------------------------------------
+    binary_start = perf_counter()
     clean_binary = _build_binary_mask(gray_image)
+    average_filtering_time_ms = (perf_counter() - binary_start) * 1000.0
 
     binary_uint8 = clean_binary.astype(np.uint8) * 255
 
@@ -222,4 +249,5 @@ def process_image(file_bytes: bytes) -> dict:
         "segmented_image":  _encode_image_to_base64(segmented_image, normalize=True),
         "binary_image":     _encode_image_to_base64(binary_uint8),
         "masked_image":     _encode_rgba_to_base64(rgba),
+        "binary_details":   _build_binary_details(gray_image, average_filtering_time_ms),
     }

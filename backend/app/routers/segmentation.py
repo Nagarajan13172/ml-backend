@@ -1,5 +1,4 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
 
 from app.schemas.segmentation import SegmentationResponse
 from app.services import segmentation_service
@@ -17,10 +16,12 @@ ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/bmp", "i
     response_model=SegmentationResponse,
     summary="Fuzzy Image Segmentation",
     description=(
-        "Upload an image file (PNG, JPEG, BMP, TIFF) and receive three processed images:\n"
+        "Upload an image file (PNG, JPEG, BMP, TIFF) and receive processed images plus binary-mask metadata:\n"
         "- **original_image**: grayscale version of your input\n"
         "- **segmented_image**: fuzzy-membership-segmented image\n"
-        "- **binary_image**: hybrid adaptive/Otsu binary image\n\n"
+        "- **binary_image**: hybrid adaptive/Otsu binary image\n"
+        "- **masked_image**: transparent lesion cutout based on the binary mask\n"
+        "- **binary_details**: description and timing metadata for the binary mask\n\n"
         "All images are returned as **base64-encoded PNG** strings."
     ),
 )
@@ -50,6 +51,7 @@ async def segment_image(file: UploadFile = File(..., description="Image file to 
             segmented_image=result["segmented_image"],
             binary_image=result["binary_image"],
             masked_image=result["masked_image"],
+            binary_details=result["binary_details"],
         )
 
     except HTTPException:

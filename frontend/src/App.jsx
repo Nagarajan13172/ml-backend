@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import './index.css';
 import UploadZone from './components/UploadZone';
 import ImageCard from './components/ImageCard';
+import InfoModal from './components/InfoModal';
 import { classifyImageStream } from './api/classificationApi';
 import { segmentImage } from './api/segmentationApi';
 
@@ -65,6 +66,7 @@ export default function App() {
   const [segStatus, setSegStatus]   = useState('idle'); // idle|loading|success|error
   const [segResult, setSegResult]   = useState(null);
   const [segError, setSegError]     = useState('');
+  const [binaryInfo, setBinaryInfo] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -76,6 +78,7 @@ export default function App() {
     setClassStatus('idle'); setEpoch(0); setLiveLabel('');
     setClassResult(null);   setClassError('');
     setSegStatus('idle');   setSegResult(null); setSegError('');
+    setBinaryInfo(null);
   }, []);
 
   const handleClear = useCallback(() => {
@@ -83,6 +86,7 @@ export default function App() {
     setClassStatus('idle'); setEpoch(0); setLiveLabel('');
     setClassResult(null);   setClassError('');
     setSegStatus('idle');   setSegResult(null); setSegError('');
+    setBinaryInfo(null);
   }, []);
 
   // ── Classify: stream 100 TTA epochs ──────────────────────────────────
@@ -120,6 +124,7 @@ export default function App() {
     setSegStatus('loading');
     setSegResult(null);
     setSegError('');
+    setBinaryInfo(null);
 
     try {
       const data = await segmentImage(file);
@@ -269,12 +274,8 @@ export default function App() {
                 title="Binary Mask"
                 description="Adaptive / Otsu threshold"
                 b64={segResult.binary_image}
-              />
-              <ImageCard
-                type="masked"
-                title="Masked Output"
-                description="Lesion extracted, background removed"
-                b64={segResult.masked_image}
+                info={segResult.binary_details}
+                onInfoClick={() => setBinaryInfo(segResult.binary_details)}
               />
             </div>
           </div>
@@ -292,6 +293,8 @@ export default function App() {
       <footer className="footer">
         ML_DEMO · 100-Epoch TTA Classification + Fuzzy Segmentation · FastAPI + React
       </footer>
+
+      <InfoModal details={binaryInfo} onClose={() => setBinaryInfo(null)} />
     </div>
   );
 }
