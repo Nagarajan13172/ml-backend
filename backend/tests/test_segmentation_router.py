@@ -33,27 +33,16 @@ class DummyUploadFile:
 
 
 class SegmentationRouterTests(unittest.TestCase):
-    def test_segment_endpoint_returns_gradcam_outputs(self) -> None:
+    def test_segment_endpoint_returns_expected_outputs(self) -> None:
         payload = {
             "original_image": "original",
             "segmented_image": "segmented",
             "binary_image": "binary",
-            "gradcam_overlay_image": "overlay",
-            "gradcam_banded_image": "banded",
             "masked_image": "masked",
             "binary_details": {
                 "title": "Binary Mask Details",
                 "description": "Binary details",
                 "average_filtering_time_ms": 12.3,
-                "timing_note": "Timing note",
-                "width": 32,
-                "height": 32,
-                "pixel_count": 1024,
-            },
-            "gradcam_details": {
-                "title": "Segmentation Grad-CAM Details",
-                "description": "Grad-CAM details",
-                "average_filtering_time_ms": 5.4,
                 "timing_note": "Timing note",
                 "width": 32,
                 "height": 32,
@@ -68,9 +57,11 @@ class SegmentationRouterTests(unittest.TestCase):
         ):
             response = asyncio.run(segment_image(upload))
 
-        self.assertEqual(response.gradcam_overlay_image, "overlay")
-        self.assertEqual(response.gradcam_banded_image, "banded")
-        self.assertEqual(response.gradcam_details.title, "Segmentation Grad-CAM Details")
+        self.assertEqual(response.original_image, "original")
+        self.assertEqual(response.segmented_image, "segmented")
+        self.assertEqual(response.binary_image, "binary")
+        self.assertEqual(response.masked_image, "masked")
+        self.assertEqual(response.binary_details.title, "Binary Mask Details")
 
 
 if __name__ == "__main__":

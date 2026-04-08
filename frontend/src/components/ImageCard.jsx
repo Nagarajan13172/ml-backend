@@ -5,8 +5,6 @@ const CONFIG = {
   segmented:    { icon: '🌈', iconClass: 'segmented', label: null },
   binary:       { icon: '⬛', iconClass: 'binary',    label: 'CLEANED' },
   masked:       { icon: '✂️', iconClass: 'masked',    label: 'KEY OUTPUT' },
-  gradcam:      { icon: '🔥', iconClass: 'gradcam',   label: 'HEATMAP' },
-  gradcamBands: { icon: '🎯', iconClass: 'gradcam-bands', label: '3 BANDS' },
 };
 
 function InfoIcon() {
@@ -27,7 +25,7 @@ function InfoIcon() {
 /**
  * A single result image card with title, image, and download button.
  * Props:
- *   type        - 'original' | 'segmented' | 'binary' | 'masked' | 'gradcam' | 'gradcamBands'
+ *   type        - 'original' | 'segmented' | 'binary' | 'masked'
  *   title       - display title
  *   description - subtitle
  *   b64         - base64-encoded PNG string
@@ -38,7 +36,6 @@ export default function ImageCard({ type, title, description, b64, info, onInfoC
   const { icon, iconClass, label } = CONFIG[type] || CONFIG.original;
   const isBinary  = type === 'binary';
   const isMasked  = type === 'masked';
-  const isGradcam = type === 'gradcam' || type === 'gradcamBands';
   const hasInfo = Boolean(info && onInfoClick);
   const src = `data:image/png;base64,${b64}`;
 
@@ -47,7 +44,7 @@ export default function ImageCard({ type, title, description, b64, info, onInfoC
   }
 
   return (
-    <div className={`image-card${isBinary ? ' binary-card' : ''}${isMasked ? ' masked-card' : ''}${isGradcam ? ' gradcam-card' : ''}`}>
+    <div className={`image-card${isBinary ? ' binary-card' : ''}${isMasked ? ' masked-card' : ''}`}>
       {/* Card Header */}
       <div className="card-header">
         <div className={`card-icon ${iconClass}`}>{icon}</div>
@@ -80,10 +77,10 @@ export default function ImageCard({ type, title, description, b64, info, onInfoC
 
       {/* Footer */}
       <div className="card-footer">
-        <span>{isMasked ? 'PNG · Transparent' : isGradcam ? 'PNG · Color' : 'PNG · Grayscale'}</span>
+        <span>{isMasked ? 'PNG · Transparent' : 'PNG · Grayscale'}</span>
         <button
           onClick={handleDownload}
-          className={`download-btn${isBinary ? ' binary' : ''}${isMasked ? ' masked' : ''}${isGradcam ? ' gradcam' : ''}`}
+          className={`download-btn${isBinary ? ' binary' : ''}${isMasked ? ' masked' : ''}`}
           title={`Download ${title}`}
         >
           ⬇ Download

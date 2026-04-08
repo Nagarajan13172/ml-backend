@@ -14,7 +14,6 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.services.segmentation_service import (
     _build_binary_details,
     _build_binary_mask,
-    _build_gradcam_visuals,
     process_image,
 )
 
@@ -83,43 +82,16 @@ class SegmentationMaskTests(unittest.TestCase):
         self.assertEqual(details["pixel_count"], 9600)
         self.assertIn("80 x 120", details["timing_note"])
 
-    def test_gradcam_visuals_use_only_expected_band_colors(self) -> None:
-        gray_image = np.full((2, 4), 0.5, dtype=np.float32)
-        attention_map = np.array(
-            [
-                [0.0, 0.30, 0.55, 0.85],
-                [0.10, 0.44, 0.69, 0.95],
-            ],
-            dtype=np.float32,
-        )
-
-        overlay_image, banded_image = _build_gradcam_visuals(gray_image, attention_map)
-
-        self.assertEqual(overlay_image.shape, (2, 4, 3))
-        unique_colors = {
-            tuple(pixel.tolist())
-            for row in banded_image
-            for pixel in row
-        }
-        self.assertEqual(
-            unique_colors,
-            {
-                (0, 0, 0),
-                (34, 197, 94),
-                (250, 204, 21),
-                (239, 68, 68),
-            },
-        )
-
-    def test_process_image_returns_gradcam_outputs(self) -> None:
+    def test_process_image_returns_expected_outputs(self) -> None:
         result = process_image(_make_test_image_bytes())
 
-        self.assertIn("gradcam_overlay_image", result)
-        self.assertIn("gradcam_banded_image", result)
-        self.assertIn("gradcam_details", result)
-        self.assertTrue(result["gradcam_overlay_image"])
-        self.assertTrue(result["gradcam_banded_image"])
-        self.assertEqual(result["gradcam_details"]["title"], "Segmentation Grad-CAM Details")
+        self.assertIn("original_image", result)
+        self.assertIn("segmented_image", result)
+        self.assertIn("binary_image", result)
+        self.assertIn("masked_image", result)
+        self.assertIn("binary_details", result)
+        self.assertTrue(result["binary_image"])
+        self.assertTrue(result["masked_image"])
 
 
 if __name__ == "__main__":

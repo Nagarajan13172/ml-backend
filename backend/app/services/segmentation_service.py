@@ -17,37 +17,6 @@ from skimage.morphology import (
 from skimage.segmentation import clear_border
 
 
-GRADCAM_BANDS = (
-    {
-        "key": "low",
-        "label": "Low affected area",
-        "color": "#22c55e",
-        "threshold_min": 0.35,
-        "threshold_max": 0.58,
-        "rgb": (34, 197, 94),
-        "overlay_alpha": 0.36,
-    },
-    {
-        "key": "medium",
-        "label": "Medium affected area",
-        "color": "#facc15",
-        "threshold_min": 0.58,
-        "threshold_max": 0.78,
-        "rgb": (250, 204, 21),
-        "overlay_alpha": 0.56,
-    },
-    {
-        "key": "high",
-        "label": "High affected area",
-        "color": "#ef4444",
-        "threshold_min": 0.78,
-        "threshold_max": 1.00,
-        "rgb": (239, 68, 68),
-        "overlay_alpha": 0.72,
-    },
-)
-
-
 def _encode_image_to_base64(image_array: np.ndarray, normalize: bool = False) -> str:
     """
     Convert a numpy image array to a base64-encoded PNG string.
@@ -196,98 +165,6 @@ def _build_binary_mask(gray_image: np.ndarray) -> np.ndarray:
     return _build_binary_mask_from_score(smoothed, relative_score, positive_scores)
 
 
-def _normalize_attention_score(
-    relative_score: np.ndarray,
-    positive_scores: np.ndarray,
-    binary_mask: np.ndarray,
-) -> np.ndarray:
-    """Normalize the lesion score into a stable 0..1 attention map."""
-    if positive_scores.size == 0:
-        return np.zeros_like(relative_score, dtype=np.float32)
-
-    lesion_support = binary_closing(binary_mask.astype(bool), disk(1))
-    lesion_support = remove_small_objects(
-        lesion_support,
-        min_size=max(10, int(binary_mask.size // 50000)),
-    )
-
-    if not np.any(lesion_support):
-        return np.zeros_like(relative_score, dtype=np.float32)
-
-    support_scores = relative_score[lesion_support]
-
-    low = float(np.percentile(support_scores, 20))
-    high = float(np.percentile(support_scores, 99))
-    if high - low <= 1e-8:
-        normalized = relative_score / (relative_score.max() + 1e-8)
-    else:
-        normalized = np.clip((relative_score - low) / (high - low), 0.0, 1.0)
-
-    normalized = normalized.astype(np.float32)
-
-    normalized *= lesion_support.astype(np.float32)
-
-    normalized = gaussian(normalized, sigma=0.7, preserve_range=True).astype(np.float32)
-
-    max_value = float(normalized.max())
-    if max_value > 1e-8:
-        normalized = normalized / max_value
-
-    return np.clip(normalized, 0.0, 1.0).astype(np.float32)
-
-
-def _build_gradcam_visuals(
-    gray_image: np.ndarray,
-    attention_map: np.ndarray,
-    binary_mask: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Build an RGB overlay and a discrete three-band map from the normalized attention map.
-    """
-    base_gray = np.clip(gray_image * 255.0, 0, 255).astype(np.uint8)
-    base_rgb = np.stack([base_gray, base_gray, base_gray], axis=2)
-
-    overlay = base_rgb.astype(np.float32).copy()
-    banded = np.zeros_like(base_rgb, dtype=np.uint8)
-
-    lesion_support = binary_closing(binary_mask.astype(bool), disk(1))
-    lesion_support = remove_small_objects(
-        lesion_support,
-        min_size=max(10, int(binary_mask.size // 50000)),
-    )
-
-    if not np.any(lesion_support):
-        return np.clip(overlay, 0, 255).astype(np.uint8), banded
-
-    support_values = attention_map[lesion_support]
-    medium_cutoff = float(np.percentile(support_values, 60))
-    high_cutoff = float(np.percentile(support_values, 85))
-
-    medium_cutoff = float(np.clip(medium_cutoff, 0.18, 0.75))
-    high_cutoff = float(np.clip(high_cutoff, medium_cutoff + 0.05, 0.92))
-
-    low_mask = lesion_support & (attention_map < medium_cutoff)
-    medium_mask = lesion_support & (attention_map >= medium_cutoff) & (attention_map < high_cutoff)
-    high_mask = lesion_support & (attention_map >= high_cutoff)
-
-    band_masks = {
-        "low": low_mask,
-        "medium": medium_mask,
-        "high": high_mask,
-    }
-
-    for band in GRADCAM_BANDS:
-        mask = band_masks.get(band["key"])
-
-        if mask is None or not np.any(mask):
-            continue
-
-        color = np.asarray(band["rgb"], dtype=np.uint8)
-        alpha = float(band["overlay_alpha"])
-        banded[mask] = color
-        overlay[mask] = overlay[mask] * (1.0 - alpha) + color * alpha
-
-    return np.clip(overlay, 0, 255).astype(np.uint8), banded
 
 
 def _build_binary_details(gray_image: np.ndarray, average_filtering_time_ms: float) -> dict:
@@ -313,29 +190,6 @@ def _build_binary_details(gray_image: np.ndarray, average_filtering_time_ms: flo
     }
 
 
-def _build_gradcam_details(gray_image: np.ndarray, average_filtering_time_ms: float) -> dict:
-    """Build explanatory metadata for the three-band segmentation attention map."""
-    height, width = gray_image.shape
-    pixel_count = int(height * width)
-
-    return {
-        "title": "Segmentation Grad-CAM Details",
-        "description": (
-            "This three-band attention map is derived from the lesion score used by the "
-            "segmentation pipeline. Green marks lightly affected pixels, yellow marks "
-            "medium-strength lesion evidence, and red marks the strongest affected areas."
-        ),
-        "average_filtering_time_ms": round(float(average_filtering_time_ms), 4),
-        "timing_note": (
-            "Measured on this upload for the segmentation attention-map stage. "
-            f"This sample is {width} x {height}, for a total of {pixel_count:,} pixels."
-        ),
-        "width": int(width),
-        "height": int(height),
-        "pixel_count": pixel_count,
-    }
-
-
 def process_image(file_bytes: bytes) -> dict:
     """
     Run fuzzy image segmentation + hybrid local/Otsu lesion masking on raw image bytes.
@@ -346,14 +200,12 @@ def process_image(file_bytes: bytes) -> dict:
         3. Build fuzzy membership functions (trimf)
         4. Apply fuzzy segmentation
         5. Build a hybrid adaptive/Otsu binary lesion mask
-        6. Build a three-band segmentation Grad-CAM-style attention map
-        7. Remove background → transparent RGBA masked image
-        8. Encode all outputs as base64 PNG strings
+        6. Remove background → transparent RGBA masked image
+        7. Encode all outputs as base64 PNG strings
 
     Returns:
         dict with keys: original_image, segmented_image, binary_image,
-        gradcam_overlay_image, gradcam_banded_image, masked_image,
-        binary_details, gradcam_details
+        masked_image, binary_details
     """
     image = skio.imread(io.BytesIO(file_bytes), as_gray=False)
 
@@ -392,11 +244,6 @@ def process_image(file_bytes: bytes) -> dict:
     clean_binary = _build_binary_mask_from_score(smoothed, relative_score, positive_scores)
     average_filtering_time_ms = (perf_counter() - binary_start) * 1000.0
 
-    gradcam_start = perf_counter()
-    attention_map = _normalize_attention_score(relative_score, positive_scores, clean_binary)
-    gradcam_overlay, gradcam_banded = _build_gradcam_visuals(gray_image, attention_map, clean_binary)
-    average_gradcam_time_ms = (perf_counter() - gradcam_start) * 1000.0
-
     binary_uint8 = clean_binary.astype(np.uint8) * 255
     gray_uint8 = np.clip(gray_image * 255, 0, 255).astype(np.uint8)
     alpha_channel = binary_uint8
@@ -412,9 +259,6 @@ def process_image(file_bytes: bytes) -> dict:
         "original_image": _encode_image_to_base64(gray_image * 255.0),
         "segmented_image": _encode_image_to_base64(segmented_image, normalize=True),
         "binary_image": _encode_image_to_base64(binary_uint8),
-        "gradcam_overlay_image": _encode_image_to_base64(gradcam_overlay),
-        "gradcam_banded_image": _encode_image_to_base64(gradcam_banded),
         "masked_image": _encode_rgba_to_base64(rgba),
         "binary_details": _build_binary_details(gray_image, average_filtering_time_ms),
-        "gradcam_details": _build_gradcam_details(gray_image, average_gradcam_time_ms),
     }

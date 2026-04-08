@@ -277,20 +277,6 @@ export default function App() {
                 info={segResult.binary_details}
                 onInfoClick={() => setInfoDetails(segResult.binary_details)}
               />
-              <ImageCard
-                type="gradcam"
-                title="Segmentation Grad-CAM"
-                description="Three-band overlay derived from the lesion score map"
-                b64={segResult.gradcam_overlay_image}
-                info={segResult.gradcam_details}
-                onInfoClick={() => setInfoDetails(segResult.gradcam_details)}
-              />
-              <ImageCard
-                type="gradcamBands"
-                title="Affected Area Bands"
-                description="Green low · yellow medium · red high"
-                b64={segResult.gradcam_banded_image}
-              />
             </div>
           </div>
         )}
