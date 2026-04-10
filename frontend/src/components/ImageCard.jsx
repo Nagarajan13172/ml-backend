@@ -1,12 +1,14 @@
 import { downloadBase64Image } from '../api/segmentationApi';
 
 const CONFIG = {
-  original:     { icon: '🔬', iconClass: 'original',  label: null },
-  segmented:    { icon: '🌈', iconClass: 'segmented', label: null },
-  binary:       { icon: '⬛', iconClass: 'binary',    label: 'CLEANED' },
-  masked:       { icon: '✂️', iconClass: 'masked',    label: 'KEY OUTPUT' },
-  gradcam:      { icon: '🔥', iconClass: 'gradcam',   label: 'HEATMAP' },
-  gradcamBands: { icon: '🎯', iconClass: 'gradcam-bands', label: '3 BANDS' },
+  original:          { icon: '🔬', iconClass: 'original',       label: null },
+  segmented:         { icon: '🌈', iconClass: 'segmented',      label: null },
+  binary:            { icon: '⬛', iconClass: 'binary',         label: 'CLEANED' },
+  masked:            { icon: '✂️', iconClass: 'masked',         label: 'KEY OUTPUT' },
+  gradcam:           { icon: '🔥', iconClass: 'gradcam',        label: 'HEATMAP' },
+  gradcamBands:      { icon: '🎯', iconClass: 'gradcam-bands',  label: '3 BANDS' },
+  classGradcam:      { icon: '🌡️', iconClass: 'gradcam',        label: 'JET MAP' },
+  classGradcamOverlay: { icon: '🔥', iconClass: 'gradcam',      label: 'OVERLAY' },
 };
 
 function InfoIcon() {
@@ -38,7 +40,7 @@ export default function ImageCard({ type, title, description, b64, info, onInfoC
   const { icon, iconClass, label } = CONFIG[type] || CONFIG.original;
   const isBinary  = type === 'binary';
   const isMasked  = type === 'masked';
-  const isGradcam = type === 'gradcam' || type === 'gradcamBands';
+  const isGradcam = type === 'gradcam' || type === 'gradcamBands' || type === 'classGradcam' || type === 'classGradcamOverlay';
   const hasInfo = Boolean(info && onInfoClick);
   const src = `data:image/png;base64,${b64}`;
 

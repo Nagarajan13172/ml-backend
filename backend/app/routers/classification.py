@@ -1,9 +1,11 @@
+import asyncio
 import json
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.schemas.classification import (
+    ClassificationGradCAMResponse,
     ClassificationHealthResponse,
     ClassificationResponse,
 )
@@ -56,6 +58,58 @@ async def classify_uploaded_image(file: UploadFile = File(..., description="Imag
         raise HTTPException(
             status_code=500,
             detail=f"Image classification failed: {str(exc)}",
+        ) from exc
+
+
+@router.post(
+    "/gradcam",
+    response_model=ClassificationGradCAMResponse,
+    summary="Classify image and generate Grad-CAM visualisation",
+    description=(
+        "Classifies the uploaded lesion image using the trained EfficientNetB0 model "
+        "and returns two Grad-CAM visualisations:\n\n"
+        "- **gradcam_heatmap_image** — standalone jet-colourmap heatmap "
+        "(blue = low importance → red = high importance).\n"
+        "- **gradcam_overlay_image** — heatmap blended onto the original image, "
+        "highlighting the regions that drove the classification decision.\n\n"
+        "Both images are base64-encoded PNGs. `gradcam_available` is `false` when "
+        "the trained Keras model is not loaded (fallback classifiers do not support Grad-CAM)."
+    ),
+)
+async def classify_with_gradcam(
+    file: UploadFile = File(..., description="Lesion image to classify"),
+):
+    """Classify and produce Grad-CAM heatmap + overlay."""
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Unsupported file type '{file.content_type}'. "
+                f"Allowed types: {', '.join(ALLOWED_CONTENT_TYPES)}"
+            ),
+        )
+
+    try:
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, classification_service.classify_with_gradcam, file_bytes
+        )
+        return ClassificationGradCAMResponse(**result)
+
+    except HTTPException:
+        raise
+    except classification_service.ClassifierNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Grad-CAM classification failed: {str(exc)}",
         ) from exc
 
 

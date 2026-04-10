@@ -70,6 +70,37 @@ export async function* classifyImageStream(file) {
 }
 
 /**
+ * Classify an image and generate Grad-CAM heatmap + overlay.
+ * Calls POST /api/classify/gradcam (single request, not streaming).
+ *
+ * @param {File} file
+ * @returns {Promise<{
+ *   predicted_label: string,
+ *   confidence: number,
+ *   class_index: number,
+ *   gradcam_heatmap_image: string|null,
+ *   gradcam_overlay_image: string|null,
+ *   gradcam_available: boolean
+ * }>}
+ */
+export async function classifyWithGradcam(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/api/classify/gradcam`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Format bytes to human-readable string.
  */
 export function formatBytes(bytes) {

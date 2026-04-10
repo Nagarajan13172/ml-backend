@@ -1083,6 +1083,35 @@ body {
   box-shadow: 0 6px 28px rgba(139, 92, 246, 0.5);
   transform: translateY(-1px);
 }
+.btn-gradcam {
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(249, 115, 22, 0.35);
+  border: none;
+  padding: 0.6rem 1.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: box-shadow 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
+}
+.btn-gradcam:hover:not(:disabled) {
+  box-shadow: 0 6px 28px rgba(239, 68, 68, 0.5);
+  transform: translateY(-1px);
+}
+.btn-gradcam:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.gradcam-description {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  text-align: center;
+}
 @media (max-width: 480px) {
   .action-buttons { flex-direction: column; }
 }
