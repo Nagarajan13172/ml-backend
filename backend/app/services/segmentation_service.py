@@ -8,6 +8,8 @@ from PIL import Image
 from skimage import color, io as skio
 from skimage.filters import gaussian, threshold_local, threshold_otsu
 from skimage.morphology import (
+    black_tophat,
+    white_tophat,
     binary_closing,
     binary_opening,
     disk,
@@ -111,7 +113,8 @@ def _odd_window_size(size: int, minimum: int = 35) -> int:
 
 def _compute_lesion_score(gray_image: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Build the dark-lesion score map used by the segmentation pipeline.
+    Build a contrast-based lesion score map using morphological tophat filters.
+    Detects both light spots on dark skin and dark spots on light skin.
 
     Returns:
         smoothed image,
@@ -122,12 +125,30 @@ def _compute_lesion_score(gray_image: np.ndarray) -> tuple[np.ndarray, np.ndarra
     height, width = image.shape
 
     smoothed = gaussian(image, sigma=1.0, preserve_range=True)
+    
+    # Extract small spots using White and Black Tophat morphology
+    # 224x224 images -> spot radius ~4 to 10
+    selem_radius = max(3, min(height, width) // 25)
+    selem = disk(selem_radius)
+    
+    bright_spots = white_tophat(smoothed, selem)
+    dark_spots = black_tophat(smoothed, selem)
+    lesion_score = bright_spots + dark_spots
+    
+    # Background estimation for normalization and flat rashes
     bg_sigma = max(8.0, min(height, width) / 10.0)
     background = gaussian(smoothed, sigma=bg_sigma, preserve_range=True)
 
-    lesion_score = np.clip(background - smoothed, 0.0, None)
+    # For flat rashes (Measles) that Tophat doesn't catch (since they're too large/flat),
+    # we add back the raw positive deviation from the background
+    intensity_score = np.clip(smoothed - background, 0, None)
+    lesion_score = lesion_score + intensity_score * 0.65
+
+    # In case of completely flat images
     if lesion_score.max() <= 1e-8:
-        lesion_score = 1.0 - smoothed
+        lesion_score = np.clip(background - smoothed, 0.0, None)
+        if lesion_score.max() <= 1e-8:
+            lesion_score = 1.0 - smoothed
 
     relative_score = lesion_score / np.maximum(background, 1e-3)
     positive_scores = relative_score[relative_score > 0]
@@ -140,20 +161,23 @@ def _build_binary_mask_from_score(
     relative_score: np.ndarray,
     positive_scores: np.ndarray,
 ) -> np.ndarray:
-    """Build a robust binary lesion mask from a precomputed lesion score."""
+    """Build a robust binary lesion mask from a precomputed relative score map."""
     if positive_scores.size == 0:
         return np.zeros_like(smoothed, dtype=bool)
 
     height, width = smoothed.shape
     local_window = _odd_window_size(min(height, width) // 8, minimum=35)
-    local_offset = float(np.clip(smoothed.std() * 0.12, 0.012, 0.03))
+    
+    # Since relative_score already represents spot contrast, we threshold IT locally
+    # rather than the smoothed image. Negative offset helps pick regions above mean.
+    local_offset = float(np.clip(relative_score.std() * 0.12, 0.01, 0.05))
     local_threshold = threshold_local(
-        smoothed,
+        relative_score,
         block_size=local_window,
         method="gaussian",
-        offset=local_offset,
+        offset=-local_offset,
     )
-    adaptive_mask = smoothed < local_threshold
+    adaptive_mask = relative_score > local_threshold
 
     strong_cutoff = float(threshold_otsu(positive_scores))
     soft_cutoff = float(np.percentile(positive_scores, 45))
@@ -163,6 +187,7 @@ def _build_binary_mask_from_score(
     binary_mask = clear_border(binary_mask)
     binary_mask = _clean_binary_mask(binary_mask)
 
+    # Refine if heavily over or under-segmented
     foreground_ratio = float(binary_mask.mean())
     if foreground_ratio > 0.18:
         stricter_cutoff = float(np.percentile(positive_scores, 70))
@@ -362,12 +387,23 @@ def process_image(file_bytes: bytes) -> dict:
 
     if image.ndim == 3:
         gray_image = color.rgb2gray(image)
+        
+        # CIELAB color space for redness (erythema) extraction
+        # The a* channel represents the red-green axis. Positive values = red.
+        # This is critical for flat macular rashes like Measles.
+        lab = color.rgb2lab(image)
+        a_channel = lab[:, :, 1]
+        a_norm = np.clip((a_channel - a_channel.min()) / (a_channel.max() - a_channel.min() + 1e-8), 0, 1)
+        
+        # Construct an enhanced base for segmentation: heavily weight redness
+        segmentation_base = np.clip(a_norm * 0.7 + gray_image * 0.3, 0.0, 1.0)
     else:
         gray_image = image.astype(np.float64)
         if gray_image.max() > 1.0:
             gray_image /= 255.0
+        segmentation_base = gray_image
 
-    hist, bin_edges = np.histogram(gray_image, bins=3)
+    hist, bin_edges = np.histogram(segmentation_base, bins=3)
     del hist
 
     level = 0.5
@@ -380,7 +416,7 @@ def process_image(file_bytes: bytes) -> dict:
         hi = bin_edges[index + 1] * 255 + level
         membership_functions.append(fuzz.trimf(x_range, [lo, mid, hi]))
 
-    img_scaled = (gray_image * 255).astype(np.float64)
+    img_scaled = (segmentation_base * 255).astype(np.float64)
     segmented_image = np.zeros_like(img_scaled)
 
     for index, membership_function in enumerate(membership_functions):
@@ -388,7 +424,7 @@ def process_image(file_bytes: bytes) -> dict:
         segmented_image += membership_vals * (index + 1)
 
     binary_start = perf_counter()
-    smoothed, relative_score, positive_scores = _compute_lesion_score(gray_image)
+    smoothed, relative_score, positive_scores = _compute_lesion_score(segmentation_base)
     clean_binary = _build_binary_mask_from_score(smoothed, relative_score, positive_scores)
     average_filtering_time_ms = (perf_counter() - binary_start) * 1000.0
 
