@@ -299,16 +299,16 @@ export default function App() {
                   <div className="image-grid">
                     <ImageCard
                       type="classGradcam"
-                      title="Grad-CAM Heatmap"
+                      title="Grad-CAM Classification"
                       description="Jet colormap — standalone activation map"
                       b64={gradcamResult.gradcam_heatmap_image}
                     />
-                    <ImageCard
+                    {/* <ImageCard
                       type="classGradcamOverlay"
                       title="Grad-CAM Overlay"
                       description="Heatmap blended onto the original image"
                       b64={gradcamResult.gradcam_overlay_image}
-                    />
+                    /> */}
                   </div>
                 </div>
               ) : (
@@ -346,12 +346,12 @@ export default function App() {
                 description="Input converted to grayscale"
                 b64={segResult.original_image}
               />
-              <ImageCard
+              {/* <ImageCard
                 type="segmented"
                 title="Fuzzy Segmented"
                 description="Fuzzy membership segmentation"
                 b64={segResult.segmented_image}
-              />
+              /> */}
               <ImageCard
                 type="binary"
                 title="Binary Mask"
@@ -360,20 +360,20 @@ export default function App() {
                 info={segResult.binary_details}
                 onInfoClick={() => setInfoDetails(segResult.binary_details)}
               />
-              <ImageCard
+              {/* <ImageCard
                 type="gradcam"
                 title="Segmentation Grad-CAM"
                 description="Three-band overlay derived from the lesion score map"
                 b64={segResult.gradcam_overlay_image}
                 info={segResult.gradcam_details}
                 onInfoClick={() => setInfoDetails(segResult.gradcam_details)}
-              />
-              <ImageCard
+              /> */}
+              {/* <ImageCard
                 type="gradcamBands"
                 title="Affected Area Bands"
                 description="Green low · yellow medium · red high"
                 b64={segResult.gradcam_banded_image}
-              />
+              /> */}
             </div>
           </div>
         )}
