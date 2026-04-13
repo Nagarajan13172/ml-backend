@@ -35,6 +35,7 @@ class SegmentationResponse(BaseModel):
     masked_image: str        # base64-encoded PNG of the lesion extracted (bg removed)
     binary_details: BinaryMaskDetails
     gradcam_details: GradCamDetails
+    is_normal: bool = False  # True when the classifier identifies the image as Normal skin
     message: str = "Segmentation completed successfully"
 
 

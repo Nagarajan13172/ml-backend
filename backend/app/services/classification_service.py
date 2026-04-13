@@ -196,11 +196,51 @@ def _augment_image(image: np.ndarray) -> np.ndarray:
 # the segmentation Grad-CAM the user already sees and trusts.
 
 
+def _build_classic_gradcam(
+    base_image: np.ndarray,      # shape (H,W) or (H,W,3) in [0, 1]
+    attention_map: np.ndarray    # shape (H,W) in [0, 1]
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Build a standard continuous 'jet' colormap Grad-CAM overlay and heatmap.
+    Returns (overlay_rgb, heatmap_rgb) as uint8 arrays [0, 255].
+    """
+    import matplotlib.cm as cm
+    
+    # Apply JET colormap to the 0..1 attention map (returns RGBA [0,1])
+    jet_heatmap = cm.jet(attention_map)
+    heatmap_rgb = (jet_heatmap[:, :, :3] * 255.0).astype(np.uint8)
+    
+    # Base image logic
+    if base_image.ndim == 2:
+        base_gray = np.clip(base_image * 255.0, 0, 255).astype(np.uint8)
+        base_rgb = np.stack([base_gray, base_gray, base_gray], axis=2)
+    else:
+        base_rgb = np.clip(base_image * 255.0, 0, 255).astype(np.uint8)
+
+    # Standard overlay: blend heatmap with base image smoothly
+    # Use alpha=0.55 for nice blending
+    alpha = 0.55
+    overlay_rgb = base_rgb.copy()
+    
+    # Soft blending based on attention strength (fade smoothly)
+    blend_weights = np.clip(attention_map * 2.0, 0.0, 1.0)
+    for c in range(3):
+        overlay_layer = base_rgb[:, :, c] * (1 - alpha) + heatmap_rgb[:, :, c] * alpha
+        overlay_rgb[:, :, c] = np.where(
+            blend_weights > 0.05,
+            base_rgb[:, :, c] * (1 - blend_weights) + overlay_layer * blend_weights,
+            base_rgb[:, :, c]
+        ).astype(np.uint8)
+
+    return overlay_rgb, heatmap_rgb
+
+
 def _compute_classification_gradcam(file_bytes: bytes) -> tuple[str, str]:
     """
-    Run the segmentation-style lesion-score Grad-CAM on a raw image.
-
-    Returns (overlay_b64, banded_b64) — both base64-encoded PNG strings.
+    Run the segmentation-style lesion-score Grad-CAM on a raw image,
+    but format as classic continuous overlapping jet Grad-CAM.
+    
+    Returns (overlay_b64, heatmap_b64) — both base64-encoded PNG strings.
     Raises ValueError on invalid image bytes.
     """
     from skimage import color
@@ -208,65 +248,73 @@ def _compute_classification_gradcam(file_bytes: bytes) -> tuple[str, str]:
 
     from app.services.segmentation_service import (
         _build_binary_mask_from_score,
-        _build_gradcam_visuals,
         _compute_lesion_score,
         _encode_image_to_base64,
         _normalize_attention_score,
     )
 
-    # ── Decode to grayscale float [0, 1] ─────────────────────────────────────
+    # ── Decode to float [0, 1] ─────────────────────────────────────
     try:
-        image = skio.imread(io.BytesIO(file_bytes), as_gray=False)
+        raw_image = skio.imread(io.BytesIO(file_bytes), as_gray=False)
     except Exception as exc:
         raise ValueError("Uploaded file is not a valid image.") from exc
 
-    if image.ndim == 3 and image.shape[2] == 4:
-        image = image[:, :, :3]
+    if raw_image.ndim == 3 and raw_image.shape[2] == 4:
+        raw_image = raw_image[:, :, :3]
 
-    if image.ndim == 3:
-        gray_image = color.rgb2gray(image).astype(np.float64)
+    if raw_image.ndim == 3:
+        gray_image = color.rgb2gray(raw_image).astype(np.float64)
+        base_visual = raw_image.astype(np.float64)
+        if base_visual.max() > 1.0:
+            base_visual /= 255.0
     else:
-        gray_image = image.astype(np.float64)
+        gray_image = raw_image.astype(np.float64)
         if gray_image.max() > 1.0:
             gray_image /= 255.0
+        base_visual = gray_image
 
-    # ── Lesion-score attention map (same as segmentation pipeline) ────────────
+    # ── Lesion-score attention map ────────────
     smoothed, relative_score, positive_scores = _compute_lesion_score(gray_image)
     binary_mask = _build_binary_mask_from_score(smoothed, relative_score, positive_scores)
     attention_map = _normalize_attention_score(relative_score, positive_scores, binary_mask)
-    gradcam_overlay, gradcam_banded = _build_gradcam_visuals(gray_image, attention_map, binary_mask)
+    
+    # ── Render jet Grad-CAM ────────────
+    gradcam_overlay, gradcam_heatmap = _build_classic_gradcam(base_visual, attention_map)
 
     overlay_b64 = _encode_image_to_base64(gradcam_overlay)
-    banded_b64  = _encode_image_to_base64(gradcam_banded)
+    heatmap_b64 = _encode_image_to_base64(gradcam_heatmap)
 
-    return overlay_b64, banded_b64
+    return overlay_b64, heatmap_b64
 
 
 def classify_with_gradcam(file_bytes: bytes) -> dict:
     """
     Classify an image and generate Grad-CAM visualisations.
 
-    The Grad-CAM uses the same lesion-score pipeline as the segmentation
-    service — pure image processing, no neural-network gradients.
-    gradcam_available is always True when the image is valid.
+    Classification and Grad-CAM are computed in parallel using a thread pool
+    so the total latency is max(classify_time, gradcam_time) instead of their sum.
 
     Returns a dict with:
       predicted_label, confidence, class_index,
-      gradcam_overlay_image  (soft three-band overlay — base64 PNG),
-      gradcam_heatmap_image  (discrete green/yellow/red bands — base64 PNG),
-      gradcam_available      (True)
+      gradcam_overlay_image  (soft jet-colormap overlay — base64 PNG),
+      gradcam_heatmap_image  (standalone heatmap — base64 PNG),
+      gradcam_available      (True when image is valid)
     """
-    # ── Classify ─────────────────────────────────────────────────────────────
-    classification = classify_image(file_bytes)
+    from concurrent.futures import ThreadPoolExecutor
 
-    # ── Grad-CAM (image-processing pipeline, always succeeds) ─────────────────
-    try:
-        overlay_b64, banded_b64 = _compute_classification_gradcam(file_bytes)
-        gradcam_available = True
-    except Exception:
-        overlay_b64 = None
-        banded_b64  = None
-        gradcam_available = False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        classify_future = pool.submit(classify_image, file_bytes)
+        gradcam_future  = pool.submit(_compute_classification_gradcam, file_bytes)
+
+        classification = classify_future.result()
+
+        try:
+            overlay_b64, banded_b64 = gradcam_future.result()
+            gradcam_available = True
+        except Exception:
+            overlay_b64 = None
+            banded_b64  = None
+            gradcam_available = False
 
     return {
         "predicted_label":       classification["predicted_label"],

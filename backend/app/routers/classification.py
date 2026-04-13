@@ -1,5 +1,6 @@
 import asyncio
 import json
+from functools import partial
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -45,7 +46,10 @@ async def classify_uploaded_image(file: UploadFile = File(..., description="Imag
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-        result = classification_service.classify_image(file_bytes)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, partial(classification_service.classify_image, file_bytes)
+        )
         return ClassificationResponse(**result)
 
     except HTTPException:

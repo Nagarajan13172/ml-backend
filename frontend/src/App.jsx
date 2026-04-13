@@ -3,7 +3,7 @@ import './index.css';
 import UploadZone from './components/UploadZone';
 import ImageCard from './components/ImageCard';
 import InfoModal from './components/InfoModal';
-import { classifyImageStream, classifyWithGradcam } from './api/classificationApi';
+import { classifyWithGradcam } from './api/classificationApi';
 import { segmentImage } from './api/segmentationApi';
 
 const THEME_STORAGE_KEY = 'ml-demo-theme';
@@ -57,15 +57,8 @@ export default function App() {
 
   // Classification state
   const [classStatus, setClassStatus] = useState('idle'); // idle|loading|success|error
-  const [epoch, setEpoch]             = useState(0);
-  const [liveLabel, setLiveLabel]     = useState('');
   const [classResult, setClassResult] = useState(null);
   const [classError, setClassError]   = useState('');
-
-  // Grad-CAM state (classification)
-  const [gradcamStatus, setGradcamStatus] = useState('idle'); // idle|loading|success|error
-  const [gradcamResult, setGradcamResult] = useState(null);
-  const [gradcamError, setGradcamError]   = useState('');
 
   // Segmentation state
   const [segStatus, setSegStatus]   = useState('idle'); // idle|loading|success|error
@@ -80,65 +73,32 @@ export default function App() {
 
   const handleFileSelect = useCallback((selectedFile) => {
     setFile(selectedFile);
-    setClassStatus('idle'); setEpoch(0); setLiveLabel('');
-    setClassResult(null);   setClassError('');
-    setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
-    setSegStatus('idle');   setSegResult(null); setSegError('');
+    setClassStatus('idle'); setClassResult(null); setClassError('');
+    setSegStatus('idle');   setSegResult(null);   setSegError('');
     setInfoDetails(null);
   }, []);
 
   const handleClear = useCallback(() => {
     setFile(null);
-    setClassStatus('idle'); setEpoch(0); setLiveLabel('');
-    setClassResult(null);   setClassError('');
-    setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
-    setSegStatus('idle');   setSegResult(null); setSegError('');
+    setClassStatus('idle'); setClassResult(null); setClassError('');
+    setSegStatus('idle');   setSegResult(null);   setSegError('');
     setInfoDetails(null);
   }, []);
 
-  // ── Classify: stream 100 TTA epochs ──────────────────────────────────
+  // ── Classify: single request → result + Grad-CAM ─────────────────────
   const handleClassify = async () => {
     if (!file) return;
     setClassStatus('loading');
-    setEpoch(0);
-    setLiveLabel('');
     setClassResult(null);
     setClassError('');
 
     try {
-      for await (const event of classifyImageStream(file)) {
-        if (event.error) {
-          setClassError(event.error);
-          setClassStatus('error');
-          return;
-        }
-        setEpoch(event.epoch);
-        setLiveLabel(event.predicted_label);
-        if (event.done) {
-          setClassResult(event);
-          setClassStatus('success');
-        }
-      }
+      const data = await classifyWithGradcam(file);
+      setClassResult(data);
+      setClassStatus('success');
     } catch (err) {
       setClassError(err.message || 'Classification failed.');
       setClassStatus('error');
-    }
-  };
-
-  // ── Grad-CAM (classification) ────────────────────────────────────────
-  const handleGradcam = async () => {
-    if (!file) return;
-    setGradcamStatus('loading');
-    setGradcamResult(null);
-    setGradcamError('');
-
-    try {
-      const data = await classifyWithGradcam(file);
-      setGradcamResult(data);
-      setGradcamStatus('success');
-    } catch (err) {
-      setGradcamError(err.message || 'Grad-CAM generation failed.');
-      setGradcamStatus('error');
     }
   };
 
@@ -222,21 +182,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Classification progress ── */}
-        {classStatus === 'loading' && (
-          <div className="epoch-progress">
-            <div className="epoch-header">
-              <span className="epoch-label">
-                {liveLabel ? `→ ${liveLabel}` : 'Initialising…'}
-              </span>
-              <span className="epoch-counter">Epoch {epoch} / 100</span>
-            </div>
-            <div className="epoch-track">
-              <div className="epoch-fill" style={{ width: `${epoch}%` }} />
-            </div>
-          </div>
-        )}
-
         {/* ── Classification error ── */}
         {classStatus === 'error' && (
           <div className="error-banner" style={{ marginTop: '1.25rem' }}>
@@ -248,75 +193,37 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Classification result ── */}
+        {/* ── Classification result + Grad-CAM ── */}
         {classStatus === 'success' && classResult && (
           <div className="results-section" style={{ marginTop: '2rem' }}>
             <div className="results-header">
               <h2>Classification Result</h2>
-              <div className="success-pill"><span className="dot" />100 epochs complete</div>
+              <div className="success-pill"><span className="dot" />Done</div>
             </div>
             <div className="label-card">
               <div className="label-kicker">Predicted Diagnosis</div>
               <div className="label-text">{classResult.predicted_label}</div>
             </div>
 
-            {/* Grad-CAM trigger */}
-            <div style={{ marginTop: '1.25rem', textAlign: 'center' }}>
-              <button
-                className="btn btn-gradcam"
-                onClick={handleGradcam}
-                disabled={gradcamStatus === 'loading'}
-              >
-                {gradcamStatus === 'loading'
-                  ? <><div className="spinner" /> Generating Grad-CAM…</>
-                  : '🔥 View Grad-CAM'}
-              </button>
-            </div>
-
-            {/* Grad-CAM error */}
-            {gradcamStatus === 'error' && (
-              <div className="error-banner" style={{ marginTop: '1rem' }}>
-                <span className="error-icon">!</span>
-                <div>
-                  <strong>Grad-CAM failed</strong>
-                  <div style={{ marginTop: 4 }}>{gradcamError}</div>
+            {classResult.gradcam_available && classResult.predicted_label !== 'Normal' && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <div className="results-header">
+                  <h2>Grad-CAM</h2>
+                  <div className="success-pill"><span className="dot" />Computed</div>
+                </div>
+                <div className="gradcam-description">
+                  Regions the model focused on to predict <strong>{classResult.predicted_label}</strong>.
+                  Blue = low importance · red = high importance.
+                </div>
+                <div className="image-grid">
+                  <ImageCard
+                    type="classGradcam"
+                    title="Grad-CAM"
+                    description="Jet colormap — standalone activation map"
+                    b64={classResult.gradcam_heatmap_image}
+                  />
                 </div>
               </div>
-            )}
-
-            {/* Grad-CAM images */}
-            {gradcamStatus === 'success' && gradcamResult && (
-              gradcamResult.gradcam_available ? (
-                <div style={{ marginTop: '1.5rem' }}>
-                  <div className="results-header">
-                    <h2>Classification Grad-CAM</h2>
-                    <div className="success-pill"><span className="dot" />Computed</div>
-                  </div>
-                  <div className="gradcam-description">
-                    Regions the model focused on to predict <strong>{gradcamResult.predicted_label}</strong>.
-                    Blue = low importance · red = high importance.
-                  </div>
-                  <div className="image-grid">
-                    <ImageCard
-                      type="classGradcam"
-                      title="Grad-CAM Classification"
-                      description="Jet colormap — standalone activation map"
-                      b64={gradcamResult.gradcam_heatmap_image}
-                    />
-                    {/* <ImageCard
-                      type="classGradcamOverlay"
-                      title="Grad-CAM Overlay"
-                      description="Heatmap blended onto the original image"
-                      b64={gradcamResult.gradcam_overlay_image}
-                    /> */}
-                  </div>
-                </div>
-              ) : (
-                <div className="error-banner" style={{ marginTop: '1rem' }}>
-                  <span className="error-icon">!</span>
-                  <div>Grad-CAM is only available when the trained Keras model is loaded.</div>
-                </div>
-              )
             )}
           </div>
         )}
@@ -337,44 +244,52 @@ export default function App() {
           <div className="results-section" style={{ marginTop: '2rem' }}>
             <div className="results-header">
               <h2>Segmentation Results</h2>
-              <div className="success-pill"><span className="dot" />Done</div>
+              {segResult.is_normal
+                ? <div className="success-pill" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}><span className="dot" style={{ background: '#10b981' }} />Normal</div>
+                : <div className="success-pill"><span className="dot" />Done</div>
+              }
             </div>
-            <div className="image-grid">
-              <ImageCard
-                type="original"
-                title="Original (Grayscale)"
-                description="Input converted to grayscale"
-                b64={segResult.original_image}
-              />
-              {/* <ImageCard
-                type="segmented"
-                title="Fuzzy Segmented"
-                description="Fuzzy membership segmentation"
-                b64={segResult.segmented_image}
-              /> */}
-              <ImageCard
-                type="binary"
-                title="Binary Mask"
-                description="Adaptive / Otsu threshold"
-                b64={segResult.binary_image}
-                info={segResult.binary_details}
-                onInfoClick={() => setInfoDetails(segResult.binary_details)}
-              />
-              {/* <ImageCard
-                type="gradcam"
-                title="Segmentation Grad-CAM"
-                description="Three-band overlay derived from the lesion score map"
-                b64={segResult.gradcam_overlay_image}
-                info={segResult.gradcam_details}
-                onInfoClick={() => setInfoDetails(segResult.gradcam_details)}
-              /> */}
-              {/* <ImageCard
-                type="gradcamBands"
-                title="Affected Area Bands"
-                description="Green low · yellow medium · red high"
-                b64={segResult.gradcam_banded_image}
-              /> */}
-            </div>
+
+            {segResult.is_normal ? (
+              /* ── Normal skin: show original + clear message ── */
+              <>
+                <div className="error-banner" style={{ marginTop: '1rem', borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)' }}>
+                  <span className="error-icon" style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981' }}>✓</span>
+                  <div>
+                    <strong style={{ color: '#10b981' }}>No lesion detected</strong>
+                    <div style={{ marginTop: 4, color: 'var(--text-secondary)' }}>
+                      This image was classified as <strong>Normal</strong> skin. No affected areas or lesion masks to display.
+                    </div>
+                  </div>
+                </div>
+                <div className="image-grid" style={{ marginTop: '1.25rem' }}>
+                  <ImageCard
+                    type="original"
+                    title="Original (Grayscale)"
+                    description="Input converted to grayscale"
+                    b64={segResult.original_image}
+                  />
+                </div>
+              </>
+            ) : (
+              /* ── Diseased: show original + binary mask ── */
+              <div className="image-grid">
+                <ImageCard
+                  type="original"
+                  title="Original (Grayscale)"
+                  description="Input converted to grayscale"
+                  b64={segResult.original_image}
+                />
+                <ImageCard
+                  type="binary"
+                  title="Binary Mask"
+                  description="Adaptive / Otsu threshold"
+                  b64={segResult.binary_image}
+                  info={segResult.binary_details}
+                  onInfoClick={() => setInfoDetails(segResult.binary_details)}
+                />
+              </div>
+            )}
           </div>
         )}
 
