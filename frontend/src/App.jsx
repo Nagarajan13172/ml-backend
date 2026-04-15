@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import './index.css';
 import UploadZone from './components/UploadZone';
 import ImageCard from './components/ImageCard';
@@ -54,6 +54,7 @@ function ThemeToggleIcon({ theme }) {
 export default function App() {
   const [file, setFile] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
+  const uploadZoneRef = useRef(null);
 
   // Classification state
   const [classStatus, setClassStatus] = useState('idle'); // idle|loading|success|error
@@ -76,8 +77,7 @@ export default function App() {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
-  const handleFileSelect = useCallback((selectedFile) => {
-    setFile(selectedFile);
+  const resetResults = useCallback(() => {
     setClassStatus('idle');
     setClassResult(null);   setClassError('');
     setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
@@ -85,13 +85,54 @@ export default function App() {
     setInfoDetails(null);
   }, []);
 
+  const handleFileSelect = useCallback((selectedFile) => {
+    setFile(selectedFile);
+    resetResults();
+  }, [resetResults]);
+
   const handleClear = useCallback(() => {
     setFile(null);
-    setClassStatus('idle');
+    resetResults();
+  }, [resetResults]);
+
+  const handleScanCapture = useCallback(async (scannedFile) => {
+    if (!scannedFile) return;
+    setFile(scannedFile);
+    setClassStatus('loading');
     setClassResult(null);   setClassError('');
-    setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
-    setSegStatus('idle');   setSegResult(null); setSegError('');
+    setGradcamStatus('loading'); setGradcamResult(null); setGradcamError('');
+    setSegStatus('loading');   setSegResult(null); setSegError('');
     setInfoDetails(null);
+
+    const [classifyResult, gradcamData, segData] = await Promise.allSettled([
+      classifyImage(scannedFile),
+      classifyWithGradcam(scannedFile),
+      segmentImage(scannedFile),
+    ]);
+
+    if (classifyResult.status === 'fulfilled') {
+      setClassResult(classifyResult.value);
+      setClassStatus('success');
+    } else {
+      setClassError(classifyResult.reason?.message || 'Classification failed.');
+      setClassStatus('error');
+    }
+
+    if (gradcamData.status === 'fulfilled') {
+      setGradcamResult(gradcamData.value);
+      setGradcamStatus('success');
+    } else {
+      setGradcamError(gradcamData.reason?.message || 'Grad-CAM generation failed.');
+      setGradcamStatus('error');
+    }
+
+    if (segData.status === 'fulfilled') {
+      setSegResult(segData.value);
+      setSegStatus('success');
+    } else {
+      setSegError(segData.reason?.message || 'Segmentation failed.');
+      setSegStatus('error');
+    }
   }, []);
 
   // ── Classify: single-pass instant inference ───────────────────────────
@@ -181,7 +222,23 @@ export default function App() {
           </div> */}
         </div>
 
-        <UploadZone file={file} onFileSelect={handleFileSelect} onClear={handleClear} />
+        {/* <div className="scan-cta">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => uploadZoneRef.current?.openCamera()}
+          >
+            📷 Scan with camera
+          </button>
+        </div> */}
+
+        <UploadZone
+          ref={uploadZoneRef}
+          file={file}
+          onFileSelect={handleFileSelect}
+          onScanCapture={handleScanCapture}
+          onClear={handleClear}
+        />
 
         {/* ── Action buttons (only when a file is ready) ── */}
         {file && (
