@@ -88,7 +88,8 @@ def is_available() -> bool:
         import torch          # noqa: F401
         import transformers   # noqa: F401
         return True
-    except ImportError:
+    except (ImportError, OSError):
+        # OSError can occur on Windows with torch DLL loading issues
         return False
 
 
