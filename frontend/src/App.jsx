@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import './index.css';
 import UploadZone from './components/UploadZone';
 import ImageCard from './components/ImageCard';
 import InfoModal from './components/InfoModal';
-import { classifyImageStream, classifyWithGradcam } from './api/classificationApi';
+import { classifyImage, classifyWithGradcam } from './api/classificationApi';
 import { segmentImage } from './api/segmentationApi';
 
 const THEME_STORAGE_KEY = 'ml-demo-theme';
@@ -54,11 +54,10 @@ function ThemeToggleIcon({ theme }) {
 export default function App() {
   const [file, setFile] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
+  const uploadZoneRef = useRef(null);
 
   // Classification state
   const [classStatus, setClassStatus] = useState('idle'); // idle|loading|success|error
-  const [epoch, setEpoch]             = useState(0);
-  const [liveLabel, setLiveLabel]     = useState('');
   const [classResult, setClassResult] = useState(null);
   const [classError, setClassError]   = useState('');
 
@@ -78,47 +77,75 @@ export default function App() {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
-  const handleFileSelect = useCallback((selectedFile) => {
-    setFile(selectedFile);
-    setClassStatus('idle'); setEpoch(0); setLiveLabel('');
+  const resetResults = useCallback(() => {
+    setClassStatus('idle');
     setClassResult(null);   setClassError('');
     setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
     setSegStatus('idle');   setSegResult(null); setSegError('');
     setInfoDetails(null);
   }, []);
+
+  const handleFileSelect = useCallback((selectedFile) => {
+    setFile(selectedFile);
+    resetResults();
+  }, [resetResults]);
 
   const handleClear = useCallback(() => {
     setFile(null);
-    setClassStatus('idle'); setEpoch(0); setLiveLabel('');
+    resetResults();
+  }, [resetResults]);
+
+  const handleScanCapture = useCallback(async (scannedFile) => {
+    if (!scannedFile) return;
+    setFile(scannedFile);
+    setClassStatus('loading');
     setClassResult(null);   setClassError('');
-    setGradcamStatus('idle'); setGradcamResult(null); setGradcamError('');
-    setSegStatus('idle');   setSegResult(null); setSegError('');
+    setGradcamStatus('loading'); setGradcamResult(null); setGradcamError('');
+    setSegStatus('loading');   setSegResult(null); setSegError('');
     setInfoDetails(null);
+
+    const [classifyResult, gradcamData, segData] = await Promise.allSettled([
+      classifyImage(scannedFile),
+      classifyWithGradcam(scannedFile),
+      segmentImage(scannedFile),
+    ]);
+
+    if (classifyResult.status === 'fulfilled') {
+      setClassResult(classifyResult.value);
+      setClassStatus('success');
+    } else {
+      setClassError(classifyResult.reason?.message || 'Classification failed.');
+      setClassStatus('error');
+    }
+
+    if (gradcamData.status === 'fulfilled') {
+      setGradcamResult(gradcamData.value);
+      setGradcamStatus('success');
+    } else {
+      setGradcamError(gradcamData.reason?.message || 'Grad-CAM generation failed.');
+      setGradcamStatus('error');
+    }
+
+    if (segData.status === 'fulfilled') {
+      setSegResult(segData.value);
+      setSegStatus('success');
+    } else {
+      setSegError(segData.reason?.message || 'Segmentation failed.');
+      setSegStatus('error');
+    }
   }, []);
 
-  // ── Classify: stream 100 TTA epochs ──────────────────────────────────
+  // ── Classify: single-pass instant inference ───────────────────────────
   const handleClassify = async () => {
     if (!file) return;
     setClassStatus('loading');
-    setEpoch(0);
-    setLiveLabel('');
     setClassResult(null);
     setClassError('');
 
     try {
-      for await (const event of classifyImageStream(file)) {
-        if (event.error) {
-          setClassError(event.error);
-          setClassStatus('error');
-          return;
-        }
-        setEpoch(event.epoch);
-        setLiveLabel(event.predicted_label);
-        if (event.done) {
-          setClassResult(event);
-          setClassStatus('success');
-        }
-      }
+      const result = await classifyImage(file);
+      setClassResult(result);
+      setClassStatus('success');
     } catch (err) {
       setClassError(err.message || 'Classification failed.');
       setClassStatus('error');
@@ -195,7 +222,23 @@ export default function App() {
           </div> */}
         </div>
 
-        <UploadZone file={file} onFileSelect={handleFileSelect} onClear={handleClear} />
+        {/* <div className="scan-cta">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => uploadZoneRef.current?.openCamera()}
+          >
+            📷 Scan with camera
+          </button>
+        </div> */}
+
+        <UploadZone
+          ref={uploadZoneRef}
+          file={file}
+          onFileSelect={handleFileSelect}
+          onScanCapture={handleScanCapture}
+          onClear={handleClear}
+        />
 
         {/* ── Action buttons (only when a file is ready) ── */}
         {file && (
@@ -222,21 +265,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Classification progress ── */}
-        {classStatus === 'loading' && (
-          <div className="epoch-progress">
-            <div className="epoch-header">
-              <span className="epoch-label">
-                {liveLabel ? `→ ${liveLabel}` : 'Initialising…'}
-              </span>
-              <span className="epoch-counter">Epoch {epoch} / 100</span>
-            </div>
-            <div className="epoch-track">
-              <div className="epoch-fill" style={{ width: `${epoch}%` }} />
-            </div>
-          </div>
-        )}
-
         {/* ── Classification error ── */}
         {classStatus === 'error' && (
           <div className="error-banner" style={{ marginTop: '1.25rem' }}>
@@ -253,7 +281,7 @@ export default function App() {
           <div className="results-section" style={{ marginTop: '2rem' }}>
             <div className="results-header">
               <h2>Classification Result</h2>
-              <div className="success-pill"><span className="dot" />100 epochs complete</div>
+              <div className="success-pill"><span className="dot" />Complete</div>
             </div>
             <div className="label-card">
               <div className="label-kicker">Predicted Diagnosis</div>
